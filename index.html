@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NAKUL'S CUBE</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --neon: #00f2ff; --bg: #010103; --glass: rgba(0, 242, 255, 0.03); }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Syncopate', sans-serif; }
+        body { background: var(--bg); color: white; overflow: hidden; height: 100vh; touch-action: none; }
+        
+        /* SYMMETRY ENGINE */
+        .screen { 
+            position: absolute; 
+            inset: 0; 
+            display: none; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            background: radial-gradient(circle at center, #0a0c14 0%, #010103 100%);
+            padding: 20px;
+        }
+        .active { display: flex; }
+
+        /* BRANDING DESIGN */
+        .brand { 
+            font-size: clamp(2.5rem, 10vw, 4.5rem); 
+            font-weight: 700;
+            letter-spacing: 20px; 
+            color: var(--neon); 
+            text-shadow: 0 0 30px rgba(0, 242, 255, 0.5); 
+            margin-bottom: 4rem;
+            text-align: center;
+            margin-left: 20px; /* Offset for the letter spacing gap at the end */
+        }
+        
+        /* SYMMETRICAL BUTTON BOX */
+        .btn-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            max-width: 320px;
+            align-items: center;
+        }
+
+        .btn { 
+            background: var(--glass); 
+            color: white; 
+            border: 1px solid rgba(0, 242, 255, 0.3); 
+            padding: 20px 0; 
+            width: 100%;
+            cursor: pointer; 
+            letter-spacing: 6px; 
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+            text-transform: uppercase; 
+            font-size: 0.75rem;
+            backdrop-filter: blur(10px);
+            position: relative;
+        }
+        
+        .btn:hover { 
+            background: var(--neon); 
+            color: black; 
+            box-shadow: 0 0 50px var(--neon);
+            transform: translateY(-5px);
+            border-color: var(--neon);
+        }
+
+        .btn-back {
+            border-color: rgba(255, 0, 85, 0.3);
+            color: #ff0055;
+            margin-top: 20px;
+        }
+        .btn-back:hover {
+            background: #ff0055;
+            box-shadow: 0 0 50px #ff0055;
+            border-color: #ff0055;
+        }
+        
+        /* TIMER UI */
+        #timer-display { 
+            font-size: 4rem; 
+            font-family: 'Courier New', monospace; 
+            color: white; 
+            text-shadow: 0 0 20px var(--neon); 
+            margin-bottom: 40px;
+            font-weight: 900;
+        }
+        
+        #c-container { width: 100%; height: 100%; }
+        
+        .hud { 
+            position: absolute; 
+            top: 40px; 
+            width: 100%; 
+            padding: 0 40px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            pointer-events: none; 
+            z-index: 20; 
+        }
+        .pointer { pointer-events: auto; }
+        
+        .promo { 
+            position: absolute; 
+            bottom: 40px; 
+            font-size: 0.6rem; 
+            letter-spacing: 10px; 
+            color: var(--neon); 
+            opacity: 0.4; 
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="scr-start" class="screen active">
+        <h1 class="brand">NAKUL</h1>
+        <div class="btn-stack">
+            <button class="btn" onclick="go('scr-menu')">INITIALIZE SYSTEM</button>
+        </div>
+        <div class="promo">PREMIUM INTERFACE</div>
+    </div>
+
+    <div id="scr-menu" class="screen">
+        <div class="btn-stack">
+            <button class="btn" onclick="go('scr-timer')">CHRONO TIMER</button>
+            <button class="btn" onclick="init3D(); go('scr-cube')">CUBE INTERFACE</button>
+            <button class="btn btn-back" onclick="go('scr-start')">EXIT</button>
+        </div>
+        <div class="promo">SELECT MODULE</div>
+    </div>
+
+    <div id="scr-timer" class="screen" onclick="runTimer()">
+        <div class="hud">
+            <button class="btn pointer" style="width: 120px; padding: 12px;" onclick="event.stopPropagation(); resetTimer(); go('scr-menu')">BACK</button>
+        </div>
+        <div id="timer-display">00:00.00</div>
+        <div style="font-size: 0.6rem; letter-spacing: 5px; opacity: 0.4;">TAP TO START / STOP</div>
+    </div>
+
+    <div id="scr-cube" class="screen">
+        <div class="hud">
+            <button class="btn pointer" style="width: 120px; padding: 12px;" onclick="go('scr-menu')">EXIT</button>
+            <div style="color:var(--neon); font-size: 10px; letter-spacing: 4px; opacity: 0.8;">UV SENSOR V9.0</div>
+        </div>
+        <div id="c-container"></div>
+    </div>
+
+<script>
+    function go(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    // --- TIMER LOGIC (AS DIRECTED) ---
+    let tStart, tInt, tActive = false, elapsedBeforePause = 0;
+    function runTimer() {
+        if (!tActive) {
+            tActive = true; 
+            tStart = Date.now() - elapsedBeforePause;
+            tInt = setInterval(() => {
+                let d = Date.now() - tStart;
+                let m = Math.floor(d/60000), s = Math.floor((d%60000)/1000), ms = Math.floor((d%1000)/10);
+                document.getElementById('timer-display').innerText = 
+                    `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${ms.toString().padStart(2,'0')}`;
+            }, 10);
+        } else { 
+            elapsedBeforePause = Date.now() - tStart;
+            clearInterval(tInt); 
+            tActive = false; 
+        }
+    }
+    function resetTimer() {
+        clearInterval(tInt); tActive = false; elapsedBeforePause = 0;
+        document.getElementById('timer-display').innerText = "00:00.00";
+    }
+
+    // --- CUBE PHYSICS ENGINE (UNTOUCHED) ---
+    let scene, camera, renderer, cubies = [], pivot;
+    let zoomDist = 8;
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function init3D() {
+        if(scene) return;
+        const container = document.getElementById('c-container');
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 100);
+        camera.position.set(zoomDist, zoomDist, zoomDist);
+        camera.lookAt(0,0,0);
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+        const p1 = new THREE.PointLight(0xffffff, 1.2); p1.position.set(10, 10, 10); scene.add(p1);
+        const p2 = new THREE.PointLight(0x00f2ff, 0.8); p2.position.set(-10, 5, -5); scene.add(p2);
+        const colors = [0xffffff, 0xffea00, 0xff6200, 0xe6003d, 0x00ff55, 0x0066ff];
+        for(let x=-1; x<=1; x++) {
+            for(let y=-1; y<=1; y++) {
+                for(let z=-1; z<=1; z++) {
+                    const geo = new THREE.BoxGeometry(0.92, 0.92, 0.92);
+                    const mats = colors.map(c => new THREE.MeshPhongMaterial({color: c, shininess: 150, specular: 0x555555}));
+                    const mesh = new THREE.Mesh(geo, mats);
+                    mesh.position.set(x, y, z);
+                    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+                    mesh.add(edges); scene.add(mesh); cubies.push(mesh);
+                }
+            }
+        }
+        let isDown = false, lastX, lastY, targetHit = null, rotAxis = null, slice = [], sensorAngle = 0, initialPinch = null;
+        const handleDown = (e) => {
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+            if(e.touches && e.touches.length === 2) {
+                initialPinch = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+                return;
+            }
+            isDown = true; lastX = x; lastY = y;
+            mouse.x = (x / window.innerWidth) * 2 - 1; mouse.y = -(y / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(cubies);
+            targetHit = hits.length > 0 ? hits[0] : null; sensorAngle = 0;
+        };
+        const handleMove = (e) => {
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+            if(e.touches && e.touches.length === 2 && initialPinch) {
+                const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+                zoomDist *= (initialPinch / dist); zoomDist = Math.max(5, Math.min(13, zoomDist));
+                camera.position.setLength(zoomDist); initialPinch = dist; return;
+            }
+            if(!isDown) return;
+            const dx = x - lastX, dy = y - lastY;
+            if(targetHit) {
+                if(!pivot && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+                    const normal = targetHit.face.normal.clone().applyQuaternion(targetHit.object.quaternion);
+                    const drag = new THREE.Vector3(dx, -dy, 0).normalize();
+                    rotAxis = new THREE.Vector3().crossVectors(normal, drag).normalize();
+                    if(Math.abs(rotAxis.x) > 0.5) rotAxis.set(Math.sign(rotAxis.x),0,0);
+                    else if(Math.abs(rotAxis.y) > 0.5) rotAxis.set(0,Math.sign(rotAxis.y),0);
+                    else rotAxis.set(0,0,Math.sign(rotAxis.z));
+                    pivot = new THREE.Group(); scene.add(pivot);
+                    const key = rotAxis.x !== 0 ? 'x' : (rotAxis.y !== 0 ? 'y' : 'z');
+                    const val = Math.round(targetHit.object.position[key]);
+                    slice = cubies.filter(c => Math.abs(c.position[key] - val) < 0.1);
+                    slice.forEach(c => pivot.attach(c));
+                }
+                if(pivot) {
+                    sensorAngle += (Math.abs(dx) > Math.abs(dy) ? dx : -dy) * 0.02;
+                    pivot.quaternion.setFromAxisAngle(rotAxis, sensorAngle);
+                }
+            } else {
+                scene.rotation.y += dx * 0.006; scene.rotation.x += dy * 0.006;
+            }
+            lastX = x; lastY = y;
+        };
+        const handleUp = () => {
+            if(pivot) {
+                const snapped = Math.round(sensorAngle / (Math.PI/2)) * (Math.PI/2);
+                pivot.quaternion.setFromAxisAngle(rotAxis, snapped);
+                slice.forEach(c => {
+                    scene.attach(c);
+                    c.position.set(Math.round(c.position.x), Math.round(c.position.y), Math.round(c.position.z));
+                    const q = c.quaternion;
+                    c.quaternion.set(Math.round(q.x*2)/2, Math.round(q.y*2)/2, Math.round(q.z*2)/2, Math.round(q.w*2)/2).normalize();
+                });
+                scene.remove(pivot); pivot = null;
+            }
+            isDown = false; targetHit = null; initialPinch = null;
+        };
+        container.addEventListener('touchstart', handleDown, {passive: false});
+        window.addEventListener('touchmove', handleMove, {passive: false});
+        window.addEventListener('touchend', handleUp);
+        container.addEventListener('mousedown', handleDown);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleUp);
+        function anim() { requestAnimationFrame(anim); renderer.render(scene, camera); }
+        anim();
+    }
+</script>
+</body>
+</html>
